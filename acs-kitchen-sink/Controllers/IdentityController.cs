@@ -1,6 +1,5 @@
 ﻿using Azure.Communication.Identity;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Logging;
 using System.Threading.Tasks;
 
 namespace acs_kitchen_sink.Controllers
@@ -10,12 +9,10 @@ namespace acs_kitchen_sink.Controllers
     public class IdentityController : ControllerBase
     {
         private readonly CommunicationIdentityClient _client;
-        private readonly ILogger<IdentityController> _logger;
 
-        public IdentityController(CommunicationIdentityClient client, ILogger<IdentityController> logger)
+        public IdentityController(CommunicationIdentityClient client)
         {
             _client = client;
-            _logger = logger;
         }
 
         [HttpGet]

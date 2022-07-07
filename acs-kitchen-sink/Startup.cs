@@ -1,3 +1,4 @@
+using Azure.Communication.Identity;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.SpaServices.ReactDevelopmentServer;
@@ -20,6 +21,9 @@ namespace acs_kitchen_sink
         public void ConfigureServices(IServiceCollection services)
         {
             services.AddControllersWithViews();
+
+            var connStr = Configuration.GetConnectionString("CommunicationService");
+            services.AddScoped(o => new CommunicationIdentityClient(connStr));
 
             // In production, the React files will be served from this directory
             services.AddSpaStaticFiles(configuration =>

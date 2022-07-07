@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "target": "es5",
+    "target": "ES2022",
     "allowJs": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
@@ -13,7 +13,7 @@
     "noEmit": true,
     "jsx": "preserve",
     "lib": [
-      "es2015",
+      "ES2022",
       "dom"
     ],
     "skipLibCheck": false

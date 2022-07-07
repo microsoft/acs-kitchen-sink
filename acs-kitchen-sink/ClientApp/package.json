@@ -35,7 +35,7 @@
     "eslint-plugin-jsx-a11y": "^6.4.1",
     "nan": "^2.15.0",
     "react-scripts": "^5.0.0",
-    "typescript": "3.6.4"
+    "typescript": "3.7.4"
   },
   "scripts": {
     "start": "react-scripts start",

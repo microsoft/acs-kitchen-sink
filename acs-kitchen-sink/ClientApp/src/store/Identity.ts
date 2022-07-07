@@ -51,10 +51,7 @@ export const actionCreators = {
         fetch(`identity`)
             .then(response => response.json() as Promise<{ value: Identity }>)
             .then((data: { value: Identity }) => {
-                debugger;
                 let token = new AzureCommunicationTokenCredential(data.value.accessToken.token.trim());
-
-                console.log(token);
 
                 dispatch({
                     type: 'RECEIVE_IDENTITY',
@@ -83,9 +80,9 @@ export const reducer: Reducer<IdentityState> = (state: IdentityState | undefined
         case 'REQUEST_IDENTITY':
             console.log("REQUEST_IDENTITY", action);
             return {
+                ...state,
                 identity: action.identity,
-                isLoading: true,
-                ...
+                isLoading: true
             };
         case 'RECEIVE_IDENTITY':
             console.log("REQUEST_IDENTITY", action);
