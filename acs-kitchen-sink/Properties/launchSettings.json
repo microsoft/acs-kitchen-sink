@@ -3,8 +3,8 @@
     "windowsAuthentication": false,
     "anonymousAuthentication": true,
     "iisExpress": {
-      "applicationUrl": "http://localhost:59609",
-      "sslPort": 44389
+      "applicationUrl": "http://localhost:3000",
+      "sslPort": 443
     }
   },
   "profiles": {
@@ -18,7 +18,7 @@
     "acs_kitchen_sink": {
       "commandName": "Project",
       "launchBrowser": true,
-      "applicationUrl": "https://localhost:5001;http://localhost:5000",
+      "applicationUrl": "https://localhost:443;http://localhost:3000",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       }
