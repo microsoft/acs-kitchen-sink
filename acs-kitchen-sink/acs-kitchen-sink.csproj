@@ -26,13 +26,11 @@
 
   <ItemGroup>
     <None Remove="ClientApp\src\components\Voip.tsx" />
-    <None Remove="ClientApp\src\store\Communication.ts" />
     <None Remove="ClientApp\src\store\Identity.ts" />
   </ItemGroup>
 
   <ItemGroup>
     <TypeScriptCompile Include="ClientApp\src\components\Voip.tsx" />
-    <TypeScriptCompile Include="ClientApp\src\store\Communication.ts" />
     <TypeScriptCompile Include="ClientApp\src\store\Identity.ts" />
   </ItemGroup>
 

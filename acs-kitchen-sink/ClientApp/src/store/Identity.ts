@@ -94,8 +94,8 @@ export const actionCreators = {
                 let token = new AzureCommunicationTokenCredential(refreshOptions);
 
                 Promise.all([
-                    appState.communication!.callClient.createCallAgent(token as CommunicationTokenCredential),
-                    appState.communication!.callClient.getDeviceManager()
+                    appState.identity.callClient.createCallAgent(token as CommunicationTokenCredential),
+                    appState.identity.callClient.getDeviceManager()
                 ]).then(([callAgent, deviceManager]) => dispatch({
                     type: 'RECEIVE_IDENTITY',
                     identity: data.value,
@@ -131,15 +131,17 @@ export const actionCreators = {
         createLocalVideoStream(appState.identity.deviceManager).then(localVideoStream => {
             const videoOptions = localVideoStream ? { localVideoStreams: [localVideoStream] } : undefined;
 
+            console.log("localVideoStream created for incoming call", localVideoStream);
+
             appState.identity?.incomingCall?.accept({ videoOptions }).
                 then(call => {
-                    subscribeToCall(call);
-
                     dispatch({
                         type: 'INCOMING_CALL_ACCEPTED',
                         call: call,
                         localVideoStream: localVideoStream
                     });
+
+                    // todo: push navigation to voip page
                 });
         });
     },
@@ -158,8 +160,6 @@ export const actionCreators = {
             const videoOptions = localVideoStream ? { localVideoStreams: [localVideoStream] } : undefined;
 
             let call = appState.identity.callAgent!.startCall([{ communicationUserId: calleeId.trim() }], { videoOptions });
-
-            subscribeToCall(call);
 
             dispatch({
                 type: 'START_CALL',
@@ -181,63 +181,6 @@ const createLocalVideoStream = async (deviceManager: DeviceManager): Promise<Loc
     });
 }
 
-const subscribeToCall = async (call: Call): Promise<void> => {
-    call.on('idChanged', () => {
-        console.log(`Call Id changed: ${call.id}`);
-    });
-    call.on('stateChanged', async () => {
-        console.log(`Call state changed: ${call.state}`);
-    });
-    call.on('localVideoStreamsUpdated', e => {
-        console.log(`Local Video Stream Updated: ${e}`);
-        e.added.forEach(async (lvs) => {
-            console.log(`Local Video Stream added: ${lvs}`);
-        });
-        e.removed.forEach(async (lvs) => {
-            console.log(`Local Video Stream removed: ${lvs}`);
-        })
-    });
-    call.on('remoteParticipantsUpdated', e => {
-        console.log(`Remote Participants Updated: ${e}`);
-        e.added.forEach(remoteParticipant => {
-            subscribeToRemoteParticipant(remoteParticipant)
-        });
-        // Unsubscribe from participants that are removed from the call
-        e.removed.forEach(remoteParticipant => {
-            console.log('Remote participant removed from the call.');
-        });
-    });
-}
-
-const subscribeToRemoteParticipant = async (remoteParticipant: RemoteParticipant): Promise<void> => {
-    try {
-        // Inspect the initial remoteParticipant.state value.
-        console.log(`Remote participant state: ${remoteParticipant.state}`);
-        // Subscribe to remoteParticipant's 'stateChanged' event for value changes.
-        remoteParticipant.on('stateChanged', () => {
-            console.log(`Remote participant state changed: ${remoteParticipant.state}`);
-        });
-
-        // Inspect the remoteParticipants's current videoStreams and subscribe to them.
-        remoteParticipant.videoStreams.forEach(remoteVideoStream => {
-            //subscribeToRemoteVideoStream(remoteVideoStream)
-        });
-        // Subscribe to the remoteParticipant's 'videoStreamsUpdated' event to be
-        // notified when the remoteParticiapant adds new videoStreams and removes video streams.
-        remoteParticipant.on('videoStreamsUpdated', e => {
-            // Subscribe to new remote participant's video streams that were added.
-            e.added.forEach(remoteVideoStream => {
-                //subscribeToRemoteVideoStream(remoteVideoStream)
-            });
-            // Unsubscribe from remote participant's video streams that were removed.
-            e.removed.forEach(remoteVideoStream => {
-                console.log('Remote participant video stream was removed.');
-            })
-        });
-    } catch (error) {
-        console.error(error);
-    }
-}
 
 
 // right now I'm kind of stuffing everything in redux - is there a way that it could be better organized into components?
