@@ -1,9 +1,8 @@
-﻿import { Call, CallAgent, CallClient, DeviceManager, IncomingCall } from '@azure/communication-calling';
+﻿import { Call, CallAgent, CallClient, DeviceManager, IncomingCall, LocalVideoStream, RemoteParticipant } from '@azure/communication-calling';
 import { AzureCommunicationTokenCredential, CommunicationTokenCredential, CommunicationTokenRefreshOptions } from '@azure/communication-common';
-import { debug } from 'console';
-import { MouseEventHandler } from 'react';
 import { Action, Reducer } from 'redux';
-import { AppThunkAction } from '.';
+import { ApplicationState, AppThunkAction } from '.';
+import App from '../App';
 
 // -----------------
 // STATE - This defines the type of data maintained in the Redux store.
@@ -17,6 +16,7 @@ export interface IdentityState {
     deviceManager: DeviceManager | null;
     call: Call | null;
     incomingCall: IncomingCall | null;
+    localVideoStream: LocalVideoStream | null;
 }
 
 export interface Identity {
@@ -51,15 +51,22 @@ interface IncomingCallAction {
 interface IncomingCallAcceptedAction {
     type: 'INCOMING_CALL_ACCEPTED';
     call: Call;
+    localVideoStream: LocalVideoStream;
 }
 
 interface IncomingCallEndedAction {
     type: 'INCOMING_CALL_ENDED'
 }
 
+interface StartCallAction {
+    type: 'START_CALL';
+    call: Call;
+    localVideoStream: LocalVideoStream;
+}
+
 // Declare a 'discriminated union' type. This guarantees that all references to 'type' properties contain one of the
 // declared type strings (and not any other arbitrary string).
-type KnownAction = IncomingCallAction | IncomingCallAcceptedAction | IncomingCallEndedAction | RequestIdentityAction | ReceiveIdentityAction;
+type KnownAction = IncomingCallAction | IncomingCallAcceptedAction | IncomingCallEndedAction | RequestIdentityAction | ReceiveIdentityAction | StartCallAction;
 
 // ----------------
 // ACTION CREATORS - These are functions exposed to UI components that will trigger a state transition.
@@ -86,8 +93,6 @@ export const actionCreators = {
 
                 let token = new AzureCommunicationTokenCredential(refreshOptions);
 
-                console.log("Initialized AzureCommunicationTokenCredential in Identity reducer", token);
-
                 Promise.all([
                     appState.communication!.callClient.createCallAgent(token as CommunicationTokenCredential),
                     appState.communication!.callClient.getDeviceManager()
@@ -102,9 +107,7 @@ export const actionCreators = {
                     const appState = getState();
 
                     const incomingCallHandler = async (args: { incomingCall: IncomingCall }): Promise<void> => {
-                        console.log("incomingCallHandler", args.incomingCall);
                         try {
-
                             await appState.identity.deviceManager!.askDevicePermission({ video: true, audio: true });
 
                             dispatch({
@@ -125,12 +128,20 @@ export const actionCreators = {
     acceptIncomingCall: (e: MouseEvent): AppThunkAction<KnownAction> => (dispatch, getState) => {
         const appState = getState();
 
-        appState.identity?.incomingCall?.accept().
-            then(call => dispatch({
-                type: 'INCOMING_CALL_ACCEPTED',
-                call: call
-            }));
+        createLocalVideoStream(appState.identity.deviceManager).then(localVideoStream => {
+            const videoOptions = localVideoStream ? { localVideoStreams: [localVideoStream] } : undefined;
 
+            appState.identity?.incomingCall?.accept({ videoOptions }).
+                then(call => {
+                    subscribeToCall(call);
+
+                    dispatch({
+                        type: 'INCOMING_CALL_ACCEPTED',
+                        call: call,
+                        localVideoStream: localVideoStream
+                    });
+                });
+        });
     },
     declineIncomingCall: (e: MouseEvent): AppThunkAction<KnownAction> => (dispatch, getState) => {
         const appState = getState();
@@ -139,19 +150,123 @@ export const actionCreators = {
             then(() => dispatch({
                 type: 'INCOMING_CALL_ENDED'
             }));
+    },
+    startCall: (calleeId: string): AppThunkAction<KnownAction> => (dispatch, getState) => {
+        const appState = getState();
+
+        createLocalVideoStream(appState.identity.deviceManager).then(localVideoStream => {
+            const videoOptions = localVideoStream ? { localVideoStreams: [localVideoStream] } : undefined;
+
+            let call = appState.identity.callAgent!.startCall([{ communicationUserId: calleeId.trim() }], { videoOptions });
+
+            subscribeToCall(call);
+
+            dispatch({
+                type: 'START_CALL',
+                call: call,
+                localVideoStream: localVideoStream
+            });
+        });
     }
 };
 
-   // incoming call is the only one we need to do
-                    // when incoming received we need to show way to accept the call anywhere in the app
-                    // add the toast notification with button to accept or hangup
-                    // why am I not getting a notification in my other browser that a call is incoming
-                    // need to fix dispose for when call times out - should clear out the call info on page
+// todo: handle if they don't allow device access..
+const createLocalVideoStream = async (deviceManager: DeviceManager): Promise<LocalVideoStream> => {
+    return deviceManager.askDevicePermission({ video: true, audio: true }).then(result => {
+        return deviceManager.getCameras().then(cameras => {
+            const camera = cameras[0];
+
+            return new LocalVideoStream(camera);
+        });
+    });
+}
+
+const subscribeToCall = async (call: Call): Promise<void> => {
+    call.on('idChanged', () => {
+        console.log(`Call Id changed: ${call.id}`);
+    });
+    call.on('stateChanged', async () => {
+        console.log(`Call state changed: ${call.state}`);
+    });
+    call.on('localVideoStreamsUpdated', e => {
+        console.log(`Local Video Stream Updated: ${e}`);
+        e.added.forEach(async (lvs) => {
+            console.log(`Local Video Stream added: ${lvs}`);
+        });
+        e.removed.forEach(async (lvs) => {
+            console.log(`Local Video Stream removed: ${lvs}`);
+        })
+    });
+    call.on('remoteParticipantsUpdated', e => {
+        console.log(`Remote Participants Updated: ${e}`);
+        e.added.forEach(remoteParticipant => {
+            subscribeToRemoteParticipant(remoteParticipant)
+        });
+        // Unsubscribe from participants that are removed from the call
+        e.removed.forEach(remoteParticipant => {
+            console.log('Remote participant removed from the call.');
+        });
+    });
+}
+
+const subscribeToRemoteParticipant = async (remoteParticipant: RemoteParticipant): Promise<void> => {
+    try {
+        // Inspect the initial remoteParticipant.state value.
+        console.log(`Remote participant state: ${remoteParticipant.state}`);
+        // Subscribe to remoteParticipant's 'stateChanged' event for value changes.
+        remoteParticipant.on('stateChanged', () => {
+            console.log(`Remote participant state changed: ${remoteParticipant.state}`);
+        });
+
+        // Inspect the remoteParticipants's current videoStreams and subscribe to them.
+        remoteParticipant.videoStreams.forEach(remoteVideoStream => {
+            //subscribeToRemoteVideoStream(remoteVideoStream)
+        });
+        // Subscribe to the remoteParticipant's 'videoStreamsUpdated' event to be
+        // notified when the remoteParticiapant adds new videoStreams and removes video streams.
+        remoteParticipant.on('videoStreamsUpdated', e => {
+            // Subscribe to new remote participant's video streams that were added.
+            e.added.forEach(remoteVideoStream => {
+                //subscribeToRemoteVideoStream(remoteVideoStream)
+            });
+            // Unsubscribe from remote participant's video streams that were removed.
+            e.removed.forEach(remoteVideoStream => {
+                console.log('Remote participant video stream was removed.');
+            })
+        });
+    } catch (error) {
+        console.error(error);
+    }
+}
+
+
+// right now I'm kind of stuffing everything in redux - is there a way that it could be better organized into components?
+
+
+// incoming call is the only one we need to do
+// when incoming received we need to show way to accept the call anywhere in the app
+// add the toast notification with button to accept or hangup
+// why am I not getting a notification in my other browser that a call is incoming
+// need to fix dispose for when call times out - should clear out the call info on page
+// should eventually separate out permissions and call type into different buttons and actions
+// should be able to have multiple remote participants
+// video should be something you can pop out and have follow you in small - think youtube videos
+
 
 // ----------------
 // REDUCER - For a given state and action, returns the new state. To support time travel, this must not mutate the old state.
 
-const unloadedState: IdentityState = { identity: null, isLoading: false, token: null, call: null, incomingCall: null, callAgent: null, callClient: new CallClient(), deviceManager: null };
+const unloadedState: IdentityState = {
+    identity: null,
+    isLoading: false,
+    token: null,
+    call: null,
+    incomingCall: null,
+    localVideoStream: null,
+    callAgent: null,
+    callClient: new CallClient(),
+    deviceManager: null
+};
 
 export const reducer: Reducer<IdentityState> = (state: IdentityState | undefined, incomingAction: Action): IdentityState => {
     if (state === undefined)
@@ -160,34 +275,35 @@ export const reducer: Reducer<IdentityState> = (state: IdentityState | undefined
     const action = incomingAction as KnownAction;
 
     switch (action.type) {
+        case 'START_CALL':
+            return {
+                ...state,
+                call: action.call,
+                localVideoStream: action.localVideoStream
+            }
         case 'INCOMING_CALL':
-            console.log("INCOMING_CALL", action);
             return {
                 ...state,
                 incomingCall: action.incomingCall
             };
         case 'INCOMING_CALL_ACCEPTED':
-            console.log("INCOMING_CALL_ACCEPTED", action);
             return {
                 ...state,
                 incomingCall: null,
                 call: action.call
             }
-        case 'INCOMING_CALL_ENDED': 
-            console.log("INCOMING_CALL_ENDED", action);
+        case 'INCOMING_CALL_ENDED':
             return {
                 ...state,
                 incomingCall: null
             };
         case 'REQUEST_IDENTITY':
-            console.log("REQUEST_IDENTITY", action);
             return {
                 ...state,
                 identity: action.identity,
                 isLoading: true
             };
         case 'RECEIVE_IDENTITY':
-            console.log("REQUEST_IDENTITY", action);
             return {
                 ...state,
                 identity: action.identity,
